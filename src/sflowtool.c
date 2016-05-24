@@ -300,6 +300,8 @@ typedef struct _SFSample {
   uint32_t dcd_sport;
   uint32_t dcd_dport;
   uint32_t dcd_tcpFlags;
+  uint32_t dcd_tcpSeq;
+  uint32_t dcd_tcpAck;
   uint32_t ip_fragmentOffset;
   uint32_t udp_pduLen;
 
@@ -650,8 +652,9 @@ static void writeFlowLine(SFSample *sample)
 {
   char agentIP[51], srcIP[51], dstIP[51];
   /* source */
-  if(printf("FLOW,%s,%d,%d,",
+  if(printf("FLOW,%s,%lu,%d,%d,",
 	    printAddress(&sample->agent_addr, agentIP),
+      sample->readTimestamp,
 	    sample->inputPort,
 	    sample->outputPort) < 0) {
     exit(-41);
@@ -676,7 +679,7 @@ static void writeFlowLine(SFSample *sample)
     exit(-42);
   }
   /* layer 3/4 */
-  if(printf(",%s,%s,%d,0x%02x,%d,%d,%d,0x%02x",
+  if(printf(",%s,%s,%d,0x%02x,%d,%d,%d,%" PRIu32 ",%" PRIu32 ",0x%02x",
 	    printAddress(&sample->ipsrc, srcIP),
 	    printAddress(&sample->ipdst, dstIP),
 	    sample->dcd_ipProtocol,
@@ -684,6 +687,8 @@ static void writeFlowLine(SFSample *sample)
 	    sample->dcd_ipTTL,
 	    sample->dcd_sport,
 	    sample->dcd_dport,
+      sample->dcd_tcpSeq,
+      sample->dcd_tcpAck,
 	    sample->dcd_tcpFlags) < 0) {
     exit(-43);
   }
@@ -705,7 +710,9 @@ static void writeCountersLine(SFSample *sample)
 {
   /* source */
   char agentIP[51];
-  if(printf("CNTR,%s,", printAddress(&sample->agent_addr, agentIP)) < 0) {
+  if(printf("CNTR,%s,%lu,", 
+     printAddress(&sample->agent_addr, agentIP),
+     sample->readTimestamp) < 0) {
     exit(-45);
   }
   if(printf("%u,%u,%"PRIu64",%u,%u,%"PRIu64",%u,%u,%u,%u,%u,%u,%"PRIu64",%u,%u,%u,%u,%u,%u\n",
@@ -1024,6 +1031,8 @@ static void decodeIPLayer4(SFSample *sample, uint8_t *ptr) {
       memcpy(&tcp, ptr, sizeof(tcp));
       sample->dcd_sport = ntohs(tcp.th_sport);
       sample->dcd_dport = ntohs(tcp.th_dport);
+      sample->dcd_tcpSeq = ntohl(tcp.th_seq);
+      sample->dcd_tcpAck = ntohl(tcp.th_ack);
       sample->dcd_tcpFlags = tcp.th_flags;
       sf_log(sample,"TCPSrcPort %u\n", sample->dcd_sport);
       sf_log(sample,"TCPDstPort %u\n",sample->dcd_dport);
@@ -2306,6 +2315,8 @@ static void readFlowSample_IPv4(SFSample *sample, char *prefix)
       sf_log(sample,"%sTCPSrcPort %u\n", prefix, sample->dcd_sport);
       sf_log(sample,"%sTCPDstPort %u\n", prefix, sample->dcd_dport);
       sample->dcd_tcpFlags = ntohl(nfKey.tcp_flags);
+      sf_log(sample,"%sTCPSeq %u\n", prefix, sample->dcd_tcpSeq);
+      sf_log(sample,"%sTCPAck %u\n", prefix, sample->dcd_tcpAck);
       sf_log(sample,"%sTCPFlags %u\n", prefix, sample->dcd_tcpFlags);
       break;
     case 17: /* UDP */
@@ -2361,6 +2372,8 @@ static void readFlowSample_IPv6(SFSample *sample, char *prefix)
       sf_log(sample,"%sTCPSrcPort %u\n", prefix, sample->dcd_sport);
       sf_log(sample,"%sTCPDstPort %u\n", prefix, sample->dcd_dport);
       sample->dcd_tcpFlags = ntohl(nfKey6.tcp_flags);
+      sf_log(sample,"%sTCPSeq %u\n", prefix, sample->dcd_tcpSeq);
+      sf_log(sample,"%sTCPAck %u\n", prefix, sample->dcd_tcpAck);
       sf_log(sample,"%sTCPFlags %u\n", prefix, sample->dcd_tcpFlags);
       break;
     case 17: /* UDP */
